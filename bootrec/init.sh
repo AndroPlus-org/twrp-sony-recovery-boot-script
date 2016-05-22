@@ -21,6 +21,7 @@ DEV_FOTA="/dev/block/mmcblk0p32"
 LOG_FILE="/bootrec/boot-log.txt"
 RECOVERY_CPIO="/bootrec/recovery.cpio"
 
+TOUCH_EVENT="/dev/input/event1"
 KEY_EVENT_DELAY=3
 WARMBOOT_RECOVERY=0x77665502
 
@@ -69,6 +70,11 @@ busybox mount -t proc proc /proc
 busybox mount -t sysfs sysfs /sys
 
 # Methods for controlling LED
+led_blue() {
+  busybox echo  13 > ${LED_RED}
+  busybox echo  59 > ${LED_GREEN}
+  busybox echo  95 > ${LED_BLUE}
+}
 led_amber() {
   busybox echo 255 > ${LED_RED}
   busybox echo 255 > ${LED_GREEN}
@@ -85,6 +91,18 @@ led_off() {
   busybox echo   0 > ${LED_BLUE}
 }
 
+# Start listening for key events
+busybox cat ${TOUCH_EVENT} > /dev/touchcheck&
+
+# Set LED to blue to indicate it's time to press screen
+led_blue
+
+# Sleep for a while to collect key events
+busybox sleep 2
+
+# Data collected, kill key event collector
+busybox pkill -f "cat ${TOUCH_EVENT}"
+
 # Set LED to amber to indicate it's time to press keys
 led_amber
 
@@ -92,7 +110,7 @@ led_amber
 busybox timeout -t ${KEY_EVENT_DELAY} keycheck
 
 # Check if we detected volume key pressing or the user rebooted into recovery mode
-if [ $? -eq 42 ] || busybox grep -q warmboot=${WARMBOOT_RECOVERY} /proc/cmdline; then
+if [ $? -eq 42 ] || [ -s /dev/touchcheck ] || busybox grep -q warmboot=${WARMBOOT_RECOVERY} /proc/cmdline; then
   echo "Entering Recovery Mode" >> ${LOG_FILE}
 
   # Set LED to orange to indicate recovery mode
